@@ -1,0 +1,571 @@
+# librerias necesarias
+library(sn)
+require(car)
+library(tseries)
+library(nlme)
+library(lmtest)
+library(blme)
+library(mvtnorm)
+library(mnormt)
+library(Hmisc)
+
+
+
+framin <- read.table(file.choose(),h=T)
+attach(framin)
+names(framin)
+head(framin)
+
+length(framin)
+
+### separo las variables 
+
+
+require(ggplot2)
+
+time3=rep(1:5,296)
+cholesterol2=cholesterol/100
+cho=data.frame(cholesterol2,time3)
+head(cho)
+clasi=split((cho),sujeto)
+clasi
+head(clasi)
+
+
+yy=(clasi$`100`$cholesterol)
+yt=(clasi$`100`$time)
+
+modelom=lm(yy~yt)
+summary(modelom)
+plot(time3,cholesterol2)
+lines(clasi$`1`$time3,clasi$`1`$cholesterol2,col=3,lwd=2)
+lines(clasi$`1`$time3,clasi$`1`$cholesterol2,col=3,lwd=2)
+lines(clasi$`181`$time3,clasi$`181`$cholesterol2,col=3,lwd=2)
+lines(clasi$`3`$time3,clasi$`3`$cholesterol2,col=3,lwd=2)
+
+plot(clasi$`1`$time3,clasi$`1`$cholesterol2,col=3,lwd=2,
+type="l",ylim=c(1.2,4.5),cex.axis=2)
+i=c(1:296)
+for(t in 1:40){
+tt= time3[sujeto==i[t]]
+cho=cholesterol2[sujeto==i[t]]
+lines(tt,cho,lwd=3,col=t,lty=t)
+}
+
+summary(cholesterol2)
+
+library(lattice)  
+
+library(nlme)
+
+
+## transformo la variable tiempo para lograr estabiliad 
+## numérica
+
+time2=time-5/10
+cholesterol2=cholesterol/100
+framin $time2 <- time2
+framin $cholesterol2 <- cholesterol2
+
+source(file="medidas.R")
+source(file="EMMM.R")
+source(file="sesgo.R")
+
+
+grouped <- groupedData(cholesterol2~time2|sujeto, 
+data=as.data.frame(framin),order.groups = F)
+
+##modelo final con ML, despues de quitar una a una vbles no significativas
+
+model.1<- lme(cholesterol2 ~ time2+time2:edad,
+random = ~ time2|sujeto,corr=corCompSymm(0.5),
+method="ML",data =grouped)
+
+summary(model.1)
+
+medidas(model.1,cholesterol2,5)
+
+
+
+model.1<- lme(log(cholesterol2) ~ time2+time2:edad,
+random = ~ time2|sujeto,corr=corCompSymm(0.5),
+method="ML",data =grouped)
+
+summary(model.1)
+
+medidas(model.1,log(cholesterol2),5)
+
+
+nsuj=296
+nj=rep(5,nsuj)
+D1=diag(2,2)
+sigmae2=1 #varianza del error aleatorios
+y=cholesterol2
+
+
+md=matrix(cbind(1,time2,time2*edad),1480)#Matriz de diseño X
+x=md
+z=cbind(rep(1,1480),time2)
+lambda=c(0.5,0.5)
+
+lb=0.01
+ls=10
+
+e_fijos=c(2.485,0.095,-0.0013)
+qes=EM.Skew(nsuj,nj,y,x,z,betas=e_fijos,beta1=e_fijos,sigmae=sigmae2,D1,lambda,nu=2,
+Ind=1,lb,ls,precisão,loglik=T,informa=T,calcbi=T)
+
+medidasMM(m=qes,y=cholesterol2,k=5)
+
+### estimaa
+yy=blmer(cholesterol2~time2+time2:edad+(1+time2|sujeto), 
+cov.prior=gamma,fixef.prior=normal)
+
+medidasbay(yy,cholesterol2,5)
+
+Y=residuals(model.1)
+length(Y)
+z <- ts(matrix(Y,nrow=43,ncol = 43) )
+det(z)
+chol
+
+cc=chol2inv(z)
+shapiro.test(cc)
+
+i=c(1:10)
+resultado=matrix(0,1,length(i))
+grouped <- groupedData(cholst~year|newid, 
+data=as.data.frame(framin),order.groups = F)
+ctrl=lmeControl(opt='optim')
+hc=hclust(dist(cholst),"ave")
+
+library(cluster)
+
+##______________AGRUPACIONES___________
+for (k in 2:10){
+#memb <- cutree(hc, k)
+#memb=as.numeric(memb)
+hc=as.data.frame(pam(cholst,k)[3])
+          memb=as.numeric(hc$clustering)
+m<-lme(cholst~year+memb,random = ~ year|newid,corr=corCompSymm(0.1),
+method="ML",data =grouped,control=ctrl)
+summary(m)
+yest = fitted(m)
+y=cholst
+sse = sum((yest-y)^2)
+ssr = sum((y-mean(y))^2) 
+R2 = 1 - sse/ssr
+resultado[,k]=R2
+}
+
+resultado=as.matrix(resultado)
+resultado
+        x=2:10
+        length(x)
+        RESUL=resultado[,]
+        rr=as.vector(RESUL[-1])
+        plot(x,rr,type="b",col=2,lwd=3,ylim=c(0.8,0.99))   
+
+maxx=max(resultado)
+maxx
+posis=which(resultado[1,]==maxx)
+posis
+hc=as.data.frame(pam(cholst,posis)[3])
+memb=as.factor(hc$clustering)
+
+m<-lme(cholst~year+memb,random = ~ year|newid,corr=corCompSymm(0.1),
+method="REML",data =grouped,control=ctrl)
+summary(m)
+yest = fitted(m)
+y=cholst
+sse = sum((yest-y)^2)
+ssr = sum((y-mean(y))^2) 
+R2 = 1 - sse/ssr
+R2
+
+summary(m)
+medidas(m,cholst,5)
+qqnorm(m, ~ resid(., type = "p") | Sex, abline = c(0, 1))
+
+
+fm1 <- lme(distance ~ age, Orthodont, random = ~ age | Subject)
+# normal plot of standardized residuals by gender
+qqnorm(fm1, ~ resid(., type = "p") | Sex, abline = c(0, 1))
+# normal plots of random effects
+qqnorm(m, ~ranef(.))
+
+ranef(m)
+yy=blmer(cholesterol2~time2+memb+(1+time2|sujeto), 
+cov.prior=gamma,fixef.prior=normal)
+medidasbay(yy,cholesterol2,5)
+
+
+
+hh=data.frame(memb,cholesterol2,sujeto)
+hh
+hh$memb1
+
+clasi2=split(hh,memb)
+clasi2
+
+grupo1=clasi2$`1`
+grupo2=clasi2$`2`
+grupo3=clasi2$`3`
+grupo4=clasi2$`4`
+
+
+
+
+
+plot(density(grupo1$cholesterol2),xlim=c(1,5),ylim=c(0,7), 
+col=1,lwd=5,lty=1,cex.axis=3)
+lines(density(grupo2$cholesterol2),col=2,lwd=5,lty=2)
+lines(density(grupo3$cholesterol2),col=3,lwd=5,lty=3)
+lines(density(grupo4$cholesterol2),col=4,lwd=5,lty=4)
+legend("topright",legend = c("Grupo 1", "Grupo 1",
+"Grupo 3","Grupo 4"),col=c(3,1,2,4),lty =c(3,1,2,4),cex=2,
+title = "Grupos estimados",lwd=5)
+
+g <- function(x)c(N=length(x),MEAN=mean(x,na.rm=TRUE),
+SD=sd(x,na.rm=TRUE),MIN=min(x,na.rm=TRUE),
+MAX=max(x,na.rm=TRUE))
+sujeto=NIT
+
+
+summarize(cholesterol2,by=llist(memb),g)
+
+
+
+cho=data.frame(cholesterol2,memb)
+head(cho)
+clasi=split((cho),memb)
+clasi
+
+g1=(clasi$`1`$cholesterol2)
+shapiro.test(g1)
+g2=(clasi$`2`$cholesterol2)
+shapiro.test(g2)
+g3=(clasi$`3`$cholesterol2)
+shapiro.test(g3)
+g4=(clasi$`4`$cholesterol2)
+shapiro.test(g4)
+
+###prueba de sesgo
+x=scale(cholesterol)
+
+## sesgo 
+x=scale(g4)
+plot(density(x), col=3,lwd=3)
+
+### sesgo y proporcion
+bandas_proporcion(x,distri='ST','Precio escalado',nivel=0.51)
+bandas_proporcion(x,distri='SN','Precio escalado',nivel=0.51)
+bandas_proporcion(x,distri='Normal','Precio escalado',nivel=0.51)
+
+busca(x,simu=100,nivel=1.3,'ST')
+busca(x,simu=100,nivel=0.58,'SN')
+
+## gráfico de densidad
+par(mfrow = c(1,2))
+hist(Y,freq = FALSE)
+##lines(density(Y),col=2,lty = 2, lwd = 2, add = TRUE)
+qqnorm(Y)
+
+density(Y)
+
+### se detecta no normalidad con la variable 
+### respuesta sin transformar
+library(MASS)
+par(mfrow=c(1,1))
+(resul_bc=boxcox(cholesterol~1, lambda = seq(-2, 2, length=100), plotit = TRUE,
+       xlab = expression(lambda),ylab = "log-Verosimilitud"))
+
+###modelo inicial con log respuesta
+model.1<- lme(log(cholesterol) ~ time+bmi+edad+cigarrillos+clasi
++time:edad+time:bmi+bmi:edad+clasi:time+clasi:bmi,
+random = ~ 1,corr=corCompSymm(0.5),
+method="REML",data =grouped)
+summary(model.1)
+
+
+
+
+### modelo final 
+model.2<- lme(log(cholesterol) ~ time2+time2:edad+
+clasi:time,random = ~ 1,corr=corCompSymm(0.5),
+method="ML",data =grouped)
+summary(model.2)
+
+Y=residuals(model.1)
+z <- ts(matrix(Y,nrow=43,ncol = 43) )
+det(z)
+cc=chol2inv(z)
+shapiro.test(cc)
+
+
+
+
+
+## gráfico de densidad
+par(mfrow = c(1,2))
+hist(Y,freq = FALSE)
+lines(density(Y),col=2,lty = 2, lwd = 2, add = TRUE)
+qqnorm(Y)
+
+density(Y)
+
+library(sn)
+m1 <- selm(cholesterol ~ time+time:edad+
+clasi:time, family="ST", data=framin,alpha=0)
+summary(m1)
+plot(m1)
+
+
+library(sn)
+## modelo selm inicial
+m1 <- selm(cholesterol ~ time+bmi+edad+cigarrillos+clasi
++time:edad+time:bmi+bmi:edad+clasi:time+clasi:bmi, 
+family="ST", data=framin)
+summary(m1)
+plot(m1)
+
+## modelo selm inicial con ST
+m1 <- selm(cholesterol ~ time+bmi+edad+clasi
++time:edad+clasi:bmi, 
+family="ST", data=framin)
+summary(m1)
+plot(m1)
+
+Y=residuals(m1)
+z <- ts(matrix(Y,nrow=43,ncol = 43) )
+det(z)
+cc=chol2inv(z)
+shapiro.test(cc)
+
+
+## modelo selm inicial ahora con SN
+m1 <- selm(cholesterol ~ time+bmi+edad+clasi
++time:edad+clasi:bmi, 
+family="SN", data=framin)
+summary(m1)
+plot(m1)
+
+
+Y=residuals(m1)
+z <- ts(matrix(Y,nrow=43,ncol = 43) )
+det(z)
+cc=chol2inv(z)
+shapiro.test(cc)
+
+
+
+#Función para bandas de normalidad#
+
+m1 <- selm(cholesterol ~bmi+edad+cigarrillos+clasi
++time:edad+time:bmi+bmi:edad+clasi:time+clasi:bmi, 
+family="SN", data=framin)
+summary(m1)
+plot(m1)
+
+
+
+
+m1 <- selm((cholesterol) ~ time+bmi+edad+clasi
++time:edad+clasi:bmi, 
+family="SN", data=framin)
+summary(m1)
+plot(m1)
+
+Y=residuals(m1)
+
+
+## gráfico de densidad
+par(mfrow = c(1,2))
+hist(Y,freq = FALSE)
+lines(density(Y),col=2,lty = 2, lwd = 2, add = TRUE)
+qqnorm(Y)
+
+density(Y)
+
+m1 <- selm(cholesterol ~ time+edad+clasi
++time:edad+clasi:bmi, 
+family="SN", data=framin)
+summary(m1)
+
+
+
+
+
+
+
+
+bandas_proporcion<-function(x,distri,expression,nivel){
+if(distri=='Normal'){
+y<-(x)
+ps<-seq(0.05,0.95,length=length(y))
+xi.obs<-quantile(y,probs=ps)
+sd.xis<-sqrt(ps*(1-ps)/(length(x)*dnorm(qnorm(ps))^2))
+dif<-xi.obs-qnorm(ps)
+LI= -2*sd.xis
+LS= -LI
+fi=length(which(dif>LS))
+fs=length(which(dif<LI))
+plot(ps,LI,type='l',ylim=c(-0.25,0.25),col='red',main='Bandas normal',xlab=expression)
+points(ps,LS,type='l',col='red')
+points(ps,dif)
+con=cbind(fi,fs)
+}
+if(distri=='SN'){
+y<-(x)
+ps<-seq(0.05,0.95,length=length(y))
+xi.obs<-quantile(y,probs=ps)
+sd.xis<-sqrt(ps*(1-ps)/(length(x)*dsn(qsn(ps,xi=0,omega=1,alpha=1))^2))
+#plot(sd.xis)
+dif<-xi.obs-qsn(ps)
+LI<- -2*sd.xis
+LS<- -LI
+fi=length(which(dif>LS))
+fs=length(which(dif<LI))
+suma=fi+fs
+plot(ps,LI,type='l',ylim=c(-0.25,0.25),col='red',main='Bandas normal sesgada',xlab=expression)
+points(ps,LS,type='l',col='red')
+points(ps,dif)
+con=cbind(fi,fs)
+}
+if(distri=='ST'){
+y<-(x)
+ps<-seq(0.05,0.95,length=length(y))
+xi.obs<-quantile(y,probs=ps)
+sd.xis<-sqrt(ps*(1-ps)/(length(x)*dst(qst(ps,xi=0,omega=1,alpha=1))^2))
+dif<-xi.obs-qst(ps)
+LI<- -2*sd.xis
+LS<- -LI
+fi=length(which(dif>LS))
+fs=length(which(dif<LI))
+plot(ps,LI,type='l',ylim=c(-0.25,0.25),col='red',main='Bandas T sesgada',xlab=expression)
+points(ps,LS,type='l',col='red')
+points(ps,dif)
+con=cbind(fi,fs)
+}
+
+par(mfrow=c(1,3))
+return(con)
+}
+
+
+
+###modelo final, despues de quitar una a una no significativas
+names(framin)
+model.1<- lme(cholesterol ~ time+time:edad,
+random = ~ 1,corr=corCompSymm(0.5),
+method="ML",data =grouped)
+summary(model.1)
+
+x=scale(residuals(model.1))
+x=scale(Y)
+
+x=scale(cholesterol)
+bandas_proporcion(x,distri='ST','VALOR escalado',nivel=9)
+bandas_proporcion(x,distri='Normal','Precio escalado',nivel=-0.2)
+bandas_proporcion(x,distri='SN','Precio escalado',nivel=-0.2)
+
+comparar_SN_ST=function(variable,nsim=3,expression,nivel){
+limites=0
+pf1=matrix(0,nsim,1)
+pf2=matrix(0,nsim,1)
+valorp=matrix(0,nsim,1)
+for(i in 1:nsim){
+aplito=scale(variable)
+fue1=bandas_proporcion(x,distri='SN','Precio escalado',nivel)
+#abline(h=0,col='blue')
+#win.graph()
+fue2=bandas_proporcion(x,distri='ST','Precio escalado',nivel)
+abline(h=0,col='blue')
+nsuj=length(variable)
+p1_SN=(fue1[1]+fue1[2])/nsuj  #Normal Sesgada
+p2_ST=(fue2[1]+fue2[2])/nsuj  #TSesgada
+pf1[i,]=p1_SN #Sesgada
+pf2[i,]=p2_ST #Normal
+prup=prop.test(c(fue1[1]+fue1[2],fue2[1]+fue2[2]),c(nsuj,nsuj))
+valorp[i,]=prup[[3]]
+vec=matrix(prup[[6]])
+if(vec[1]<0) di=1 else di=0
+if(vec[2]<0) di2=1 else di2=0
+dif=di+di2
+if(dif==2) cont=1 else cont=0
+menores=cont+limites
+limites=menores
+}
+agrup=cbind(p1_SN,p2_ST,mean(pf1),mean(pf2),mean(valorp),limites/nsim)
+return(agrup)
+}
+
+
+comparar_SN_ST(x,nsim=3,expression,nivel=5)
+
+
+#Funciones para detectar nivel de sesgo, para una de las dist sesgadas#
+
+####BÚSQUEDA DEL NIVEL####
+#ARROJA MÍNIMA PROPORCIÓN DE PUNTOS CON BÚSQUEDA DE NIVEL LAMBDA EN EL QUE SE OBTIENE###
+busca=function(x,simu,nivel,distri){
+niveln=matrix(0,simu,1);porcentaje=matrix(0,simu,1)
+for(i in 1:simu){
+niveln[i]=nivel+cos(runif(1,0,2))
+if(distri=='SN'){
+prop=(bandas_proporcion(x,distri='ST','Precio escalado',nivel=nivel)[[1]]+bandas_proporcion(x,distri='SN','Precio escalado',nivel=nivel)[[2]])/length(x)
+}
+if(distri=='ST'){
+prop=(bandas_proporcion(x,distri='ST','Precio escalado',nivel=nivel)[[1]]+bandas_proporcion(x,distri='ST','Precio escalado',nivel=nivel)[[2]])/length(x)
+}
+porcentaje[i]=prop
+}
+posi=which(porcentaje==min(porcentaje),arr.ind=T)
+lista=cbind(niveln[posi[2]],porcentaje[posi[2]])
+colnames(lista)=c('nivel','Proporción por fuera')
+return(lista)
+}
+
+busca(x,simu=50,nivel=1.16,'SN')
+
+#LISTA TABU. OBJETIVO: NIVEL QUE MINIMIZA EL TOTAL DE PUNTOS POR FUERA DE LAS BANDAS#
+
+listat=function(x,simu,simu2,distri,nivel){
+niveln=matrix(0,simu2,1)  ; resul=matrix(0,simu2,2)
+niveln[1]=nivel+cos(runif(1,0,1))
+resul[1,]=busca(x,simu,niveln[1],distri)
+lista1=resul[1,]
+fob=resul[1,2]
+for(i in 2:simu){
+niveln[i]=nivel+cos(runif(1,0,1))
+resul[i,]=busca(x,simu,niveln[i],distri)
+fob=resul[i,2]
+lista=rbind(lista1,t(resul[i,]))
+if(fob<resul[(i-1),2]) listan=lista else nivel=rnorm(1,0,1)
+lista1=lista
+}
+posi=which(listan[,2]==min(listan[,2]))
+este=listan[posi,]
+names(este)=c('nivel','proporción por fuera')
+return(este)
+}
+
+x=res
+mínimo=listat(x,simu=10,simu2=10,'ST',nivel=1)
+mínimo
+
+
+#####detección sesgo para residuales por producto#####
+i=c('LPD','LPE','LPS','Polvo','queso')
+resultado=matrix(0,length(i),2)
+sesgo_tipo=function(x,simu,simu2,distri){
+for(t in 1:5){
+aplica=x[Producto==i[t]]
+parte=listat(aplica,simu=10,simu2=10,'ST')
+if(length(parte)==2) resultado[t,]=parte else resultado[t,]=parte[dim(parte)[1],]
+}
+rownames(resultado)=i
+return(resultado)
+}
+
+x=res
